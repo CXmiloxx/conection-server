@@ -1,34 +1,28 @@
-# Guía para Gestión de Claves SSH (local & servidor)
+# Guía práctica para gestión de claves SSH (local & servidor)
 
 ---
 
-## 🚩 Resumen: ¿Dónde se hace cada paso?
+## 🚩 ¿Dónde se hace cada paso?
 
-| Acción                               | ¿Dónde?     |
-| ------------------------------------ | ----------- |
-| **Generar pares de claves**          | 💻 Local    |
-| **Copiar clave pública al servidor** | 💻 Local    |
-| **Conectarse al servidor**           | 💻 Local    |
-| **Autorizar o revocar accesos**      | 🖥️ Servidor |
-| **Borrar claves privadas**           | 💻 Local    |
+| Acción                     | Lugar       |
+| -------------------------- | ----------- |
+| Generar claves             | 💻 Local    |
+| Copiar clave pública       | 💻 Local    |
+| Conectarse por SSH         | 💻 Local    |
+| Autorizar / revocar claves | 🖥️ Servidor |
+| Borrar clave privada       | 💻 Local    |
 
 ---
 
-## 🔒 Algoritmo Recomendado
-
-**Usa SIEMPRE:**
+## 🔒 Algoritmo
 
 ```bash
 ed25519
 ```
 
-_Más seguro y rápido que RSA._
-
 ---
 
-## 🏷️ Nomenclatura de las claves
-
-Nombre sugerido para identificar cada par:
+## 🏷️ Nomenclatura
 
 ```text
 id_ed25519_<proyecto_o_servidor>
@@ -40,43 +34,47 @@ Ejemplo:
 id_ed25519_servidorweb
 ```
 
-¡Así sabrás siempre para qué sirve cada clave!
-
 ---
 
-# 💻 PASOS EN LOCAL
+# 💻 LOCAL
 
-## 1️⃣ Generar una nueva clave SSH
+## 1️⃣ Crear clave
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_servidorweb -C "tuusuario@servidor"
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_servidorweb -C "usuario@servidor"
 ```
 
 - Elige una passphrase segura cuando se te pida (opcional pero recomendable).
 
 ---
 
-## 2️⃣ Copiar tu clave pública al servidor
+## 2️⃣ Copiar la clave al servidor
+
+Puerto por defecto:
 
 ```bash
 ssh-copy-id -i ~/.ssh/id_ed25519_servidorweb.pub usuario@servidor
 ```
 
-¿Servidor en puerto distinto? Usa:
+Con puerto distinto:
 
 ```bash
-ssh-copy-id -i ~/.ssh/id_ed25519_servidorweb.pub -p 2222 usuario@servidor
+ssh-copy-id -p 2222 -i ~/.ssh/id_ed25519_servidorweb.pub usuario@servidor
 ```
 
 ---
 
-## 3️⃣ Conectarse usando tu clave
+## 3️⃣ Conectarse usando esa clave
 
 ```bash
 ssh -i ~/.ssh/id_ed25519_servidorweb usuario@servidor
 ```
 
-- ¿Otro puerto? Añade `-p <puerto>`.
+Con puerto:
+
+```bash
+ssh -p 2222 -i ~/.ssh/id_ed25519_servidorweb usuario@servidor
+```
 
 ---
 
@@ -87,15 +85,13 @@ rm ~/.ssh/id_ed25519_servidorweb
 rm ~/.ssh/id_ed25519_servidorweb.pub
 ```
 
-> ⚠️ **Esto sólo elimina la copia local. Si ya la copiaste al servidor, también debes borrarla allí.**
+> ⚠️ Esto no revoca el acceso en el servidor.
 
 ---
 
-# 🖥️ PASOS EN SERVIDOR
+# 🖥️ SERVIDOR
 
-## 5️⃣ Dónde están las claves autorizadas
-
-Tu archivo de claves públicas autorizadas es:
+## 5️⃣ Archivo de claves autorizadas
 
 ```text
 ~/.ssh/authorized_keys
@@ -103,7 +99,7 @@ Tu archivo de claves públicas autorizadas es:
 
 ---
 
-## 6️⃣ Ver las claves autorizadas
+## 6️⃣ Ver claves autorizadas
 
 ```bash
 cat ~/.ssh/authorized_keys
@@ -111,57 +107,79 @@ cat ~/.ssh/authorized_keys
 
 ---
 
-## 7️⃣ Revocar acceso (quitar una clave)
-
-Edita el archivo:
+## 7️⃣ Revocar acceso
 
 ```bash
 nano ~/.ssh/authorized_keys
 ```
 
-- Borra la línea correspondiente a la clave a revocar (¡cuidado!).
+Eliminar únicamente la línea correspondiente.
 
 ---
 
-## 8️⃣ ¿Cuál línea borrar?
+## 8️⃣ Identificar qué línea borrar
 
-Desde local puedes ver el contenido de tu clave pública:
+Desde local:
 
 ```bash
 cat ~/.ssh/id_ed25519_servidorweb.pub
 ```
 
-Busca exactamente esa línea dentro de `authorized_keys` en el servidor. Solo borra esa línea.
+Buscar esa línea exacta en `authorized_keys`.
 
 ---
 
-# 🚨 ¿Borraste la clave por accidente o quieres quitar acceso?
+# 🚨 Flujo correcto para revocar una clave
 
-**Procedimiento correcto:**
-
-1. **En el servidor:** Borra la línea de la clave en `authorized_keys`.
-2. **En local:** Borra ambos archivos de la clave con `rm`.
+1️⃣ En el servidor → borrar la línea en `authorized_keys`
+2️⃣ En local → borrar los archivos con `rm`
 
 ---
 
-# ❗ Errores comunes (¡Evítalos siempre!)
+# 🧠 Validación importante (caso real)
 
-- Nunca subas la **clave privada** a ningún repositorio ni compartas por ningún medio.
-- Jamás copies la clave privada al servidor.
-- Evita reutilizar la misma clave para diferentes servidores o servicios.
+### Error típico
+
+```text
+Too many authentication failures
+```
+
+### Causa
+
+Tu equipo tiene muchas llaves cargadas en el agente SSH y el servidor corta la conexión tras varios intentos.
+
+### Solución (usar solo la clave correcta)
+
+Para copiar la clave:
+
+```bash
+ssh-copy-id -p 2222 -i ~/.ssh/id_ed25519_servidorweb.pub -o IdentitiesOnly=yes usuario@servidor
+```
+
+Para conectarte:
+
+```bash
+ssh -p 2222 -i ~/.ssh/id_ed25519_servidorweb -o IdentitiesOnly=yes usuario@servidor
+```
+
+👉 Esta opción obliga a SSH a usar únicamente esa clave.
+
+---
+
+# ❗ Errores que debes evitar
+
+- No subir nunca la clave privada a repositorios.
+- No copiar la clave privada al servidor.
+- No reutilizar la misma clave para varios servidores.
 
 ---
 
 # 🥇 Regla de oro
 
-**Crea y usa una clave diferente para cada servidor o entorno:**
+Una clave por servidor o entorno:
 
 ```text
 id_ed25519_backend_prod
 id_ed25519_frontend_dev
 id_ed25519_clienteX
 ```
-
-¡Así tendrás seguridad y control total!
-
----
