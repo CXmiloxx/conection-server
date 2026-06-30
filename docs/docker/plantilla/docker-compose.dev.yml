@@ -1,0 +1,139 @@
+# =============================================================================
+# PLANTILLA — docker-compose de DESARROLLO (bind mounts + hot-reload)
+# =============================================================================
+# Diferencias clave vs producción (ver docs/docker/docker-compose.md):
+#   - Usa Dockerfile.dev (single-stage).
+#   - Monta el código del host con bind mount (./SERVICIO:/app) → hot-reload.
+#   - node_modules y artefactos generados van en VOLUMEN NOMBRADO para que el
+#     bind mount del host no los pise (host puede tener binarios de otra arch).
+#
+# Patrón con submódulo anidado compartido (./DATABASE):
+#   Varios servicios comparten un repo de schema/recursos (submódulo anidado).
+#   Generan artefactos al arrancar con `pnpm db:generate` y los guardan en un
+#   volumen nombrado (/app/DATABASE/generated).
+#
+# Sustituye org y los nombres de servicio/carpeta por los reales.
+# =============================================================================
+
+services:
+  # ───────────────────────────────────────────────────────────────────────
+  # Servicio API A  (submódulo ./SERVICIO-API-A, con schema compartido ./DATABASE)
+  # ───────────────────────────────────────────────────────────────────────
+  api_servicio_a:
+    container_name: org_api_a_dev
+    image: org_api_a_dev
+    build:
+      context: ./SERVICIO-API-A
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    restart: unless-stopped
+    ports:
+      - "${API_A_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      SERVICE_NAME: org-api-a
+      PORT: 3000
+    env_file:
+      - ./SERVICIO-API-A/.env
+    working_dir: /app
+    volumes:
+      - ./SERVICIO-API-A:/app # bind mount → hot-reload
+      - org_api_a_node_modules:/app/node_modules # volumen: no pisar node_modules
+      - org_api_a_db_generated:/app/DATABASE/generated # artefactos del submódulo anidado
+    command: sh -c "pnpm db:generate && pnpm start:dev"
+    networks:
+      - app_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Servicio API B  (submódulo ./SERVICIO-API-B)
+  # ───────────────────────────────────────────────────────────────────────
+  api_servicio_b:
+    container_name: org_api_b_dev
+    image: org_api_b_dev
+    build:
+      context: ./SERVICIO-API-B
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    restart: unless-stopped
+    ports:
+      - "${API_B_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      SERVICE_NAME: org-api-b
+      PORT: 3001
+    env_file:
+      - ./SERVICIO-API-B/.env
+    working_dir: /app
+    volumes:
+      - ./SERVICIO-API-B:/app
+      - org_api_b_node_modules:/app/node_modules
+      - org_api_b_db_generated:/app/DATABASE/generated
+    command: sh -c "pnpm db:generate && pnpm start:dev"
+    networks:
+      - app_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Frontend  (submódulo ./WEB-ADMIN)
+  # WATCHPACK_POLLING / CHOKIDAR_USEPOLLING: hot-reload en Linux/WSL sobre bind mount.
+  # ───────────────────────────────────────────────────────────────────────
+  web_admin:
+    container_name: org_admin_dev
+    image: org_admin_dev
+    build:
+      context: ./WEB-ADMIN
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-3002}:3002"
+    env_file:
+      - ./WEB-ADMIN/.env.development
+    working_dir: /app
+    volumes:
+      - ./WEB-ADMIN:/app:delegated
+      - org_admin_node_modules:/app/node_modules
+    environment:
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      NODE_ENV: development
+    command: pnpm dev
+    networks:
+      - app_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  app_network:
+    driver: bridge
+    name: org_dev_network
+
+# Un volumen nombrado por cada servicio. Los *_db_generated solo aplican a los
+# servicios que usan el submódulo de schema compartido (./DATABASE).
+volumes:
+  org_admin_node_modules:
+  org_api_a_node_modules:
+    driver: local
+  org_api_a_db_generated:
+    driver: local
+  org_api_b_node_modules:
+    driver: local
+  org_api_b_db_generated:
+    driver: local

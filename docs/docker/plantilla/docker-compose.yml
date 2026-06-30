@@ -1,0 +1,131 @@
+# =============================================================================
+# PLANTILLA — docker-compose de PRODUCCIÓN
+# =============================================================================
+# Repo raíz que orquesta varios servicios. Cada servicio es un SUBMÓDULO de Git
+# = un repositorio independiente de la organización (ver docs/git/submodulos.md).
+#
+# Cómo usar esta plantilla:
+#   1. Sustituye org por el prefijo de tu organización (minúsculas).
+#   2. Renombra los servicios y carpetas (./SERVICIO-API-A, ./WEB-ADMIN, ...)
+#      por los nombres reales de tus submódulos.
+#   3. Ajusta puertos, límites de cpu/memoria y duplica/elimina bloques según
+#      cuántos servicios tengas.
+# =============================================================================
+
+services:
+  # ───────────────────────────────────────────────────────────────────────
+  # Servicio API A  (backend — submódulo ./SERVICIO-API-A)
+  # ───────────────────────────────────────────────────────────────────────
+  api_servicio_a:
+    container_name: org_api_a_prod
+    build:
+      context: ./SERVICIO-API-A          # carpeta del submódulo
+      dockerfile: Dockerfile             # multi-stage (ver docs/docker/dockerfiles.md)
+      args:
+        NODE_ENV: production
+    image: org_api_a_prod
+    restart: unless-stopped
+    ports:
+      - "${API_A_PORT:-3000}:3000"       # puerto definido en .env (con valor por defecto)
+    env_file:
+      - ./SERVICIO-API-A/.env            # secretos del servicio (NO versionado)
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      SERVICE_NAME: org-api-a
+      PORT: 3000
+    networks:
+      - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=api-a"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Servicio API B  (backend — submódulo ./SERVICIO-API-B)
+  # Duplica este bloque por cada API adicional, ajustando nombre/puerto/recursos.
+  # ───────────────────────────────────────────────────────────────────────
+  api_servicio_b:
+    container_name: org_api_b_prod
+    build:
+      context: ./SERVICIO-API-B
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: org_api_b_prod
+    restart: unless-stopped
+    ports:
+      - "${API_B_PORT:-3001}:3001"
+    env_file:
+      - ./SERVICIO-API-B/.env
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      SERVICE_NAME: org-api-b
+      PORT: 3001
+    networks:
+      - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 768M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=api-b"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Frontend  (submódulo ./WEB-ADMIN)
+  # ───────────────────────────────────────────────────────────────────────
+  web_admin:
+    container_name: org_admin_prod
+    build:
+      context: ./WEB-ADMIN
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: org_admin_prod
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-3002}:3002"
+    env_file:
+      - ./WEB-ADMIN/.env.production
+    environment:
+      NODE_ENV: production
+    networks:
+      - app_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        labels: "service=admin"
+
+networks:
+  app_network:
+    driver: bridge
+    name: org_prod_network
